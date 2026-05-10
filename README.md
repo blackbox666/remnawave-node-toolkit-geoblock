@@ -54,7 +54,19 @@
 
 ## Установка
 
-### Способ 1 — клон + меню
+Репозиторий **приватный**: запрос к `https://raw.githubusercontent.com/.../install.sh` **без авторизации даёт 404** (так GitHub скрывает приватные файлы). Ставь через **`git clone`** (SSH или HTTPS), затем `install.sh` из каталога.
+
+### Способ 1 — клон + меню (рекомендуется)
+
+SSH (нужен ключ, добавленный в GitHub):
+
+```bash
+git clone git@github.com:ded-maxim-1337/remnawave-node-toolkit-geoblock.git
+cd remnawave-node-toolkit-geoblock
+sudo bash install.sh
+```
+
+HTTPS (запросит логин; вместо пароля — [Personal Access Token](https://github.com/settings/tokens) с доступом к репозиторию):
 
 ```bash
 git clone https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
@@ -69,14 +81,15 @@ sudo bash scripts/optimize.sh
 sudo bash scripts/protect.sh
 ```
 
-### Способ 3 — one-liner с GitHub
+### Способ 3 — one-liner через `curl` (только если репозиторий публичный)
+
+Для **публичного** форка можно:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh \
-  | sudo bash -s all
+curl -fsSL https://raw.githubusercontent.com/ЧЕЙ_ЛОГИН/ИМЯ_РЕПО/main/install.sh | sudo bash -s all
 ```
 
-Свой форк без правки `install.sh` в репозитории: задай `REMNAWAVE_REPO_URL` на raw-URL ветки `main` (см. `INSTALL_GUIDE.md`).
+Для приватного репо этот URL **не подойдёт** — см. способ 1.
 
 ### Неинтерактивный режим
 

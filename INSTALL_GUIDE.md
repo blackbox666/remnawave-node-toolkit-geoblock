@@ -24,13 +24,24 @@ scp -r remnawave-node-toolkit-geoblock root@<IP>:/root/
 
 ---
 
-## 1б. Репозиторий на GitHub и установка one-liner
+## 1б. Репозиторий на GitHub
 
-**Репозиторий:** [github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock](https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock)
+**Репозиторий:** [github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock](https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock) (**приватный**).
 
-В **`install.sh`** уже прописан `REPO_URL` на `raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main`.
+В **`install.sh`** для `curl|bash` указан `REPO_URL` на raw — он работает только у **публичных** репозиториев. Сейчас при `curl ... raw.githubusercontent.com/.../install.sh` без входа GitHub отвечает **404** — это ожидаемо.
 
-Первый push с твоего ПК (если ещё не залито):
+**Установка на VPS (приватный репо):**
+
+```bash
+git clone git@github.com:ded-maxim-1337/remnawave-node-toolkit-geoblock.git
+# или: git clone https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
+cd remnawave-node-toolkit-geoblock
+sudo bash install.sh all
+```
+
+Нужен **SSH-ключ** на сервере (в аккаунте GitHub) или **HTTPS + PAT** вместо пароля.
+
+Первый push с ПК (если ещё не настроено):
 
 ```bash
 git remote add origin https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
@@ -38,20 +49,11 @@ git branch -M main
 git push -u origin main
 ```
 
-Установка на VPS:
+**Публичный форк** (если когда-нибудь откроешь репо): тогда сработает one-liner:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
 ```
-
-Чужой форк без смены `install.sh` в репозитории:
-
-```bash
-export REMNAWAVE_REPO_URL=https://raw.githubusercontent.com/ЛОГИН/РЕПО/main
-curl -fsSL "$REMNAWAVE_REPO_URL/install.sh" | sudo env REMNAWAVE_REPO_URL="$REMNAWAVE_REPO_URL" bash -s all
-```
-
-**Приватный репозиторий:** `curl` на `raw.githubusercontent.com` без токена не скачает файлы. Удобнее на VPS сделать `git clone` (HTTPS с PAT или SSH-ключ) и затем `sudo bash install.sh` из клонированной папки.
 
 ---
 
