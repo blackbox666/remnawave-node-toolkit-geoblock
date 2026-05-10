@@ -59,9 +59,10 @@
 ### Способ 1 — one-liner (`curl`)
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" \
-  | sudo bash -s all
+curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" | sudo bash -s all
 ```
+
+`?$(date +%s)` обходит закэшированный ответ CDN у `raw.githubusercontent.com`.
 
 Другой форк: задай `REMNAWAVE_REPO_URL` на свой `raw.githubusercontent.com/.../main` (см. `INSTALL_GUIDE.md`).
 
