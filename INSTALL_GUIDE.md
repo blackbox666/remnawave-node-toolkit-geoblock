@@ -210,6 +210,12 @@ systemctl disable --now ufw
 sudo /usr/local/sbin/remnawave-update-scanners
 ```
 
+**Понять, на каком ASN «висит» или что отвалилось:** в терминале идёт прогресс `[i/N]` и полоска; полный журнал:
+
+```bash
+sudo tail -f /var/log/remnawave-toolkit/whois-asn.log
+```
+
 ---
 
 ## 9. Что под капотом (короткое объяснение)

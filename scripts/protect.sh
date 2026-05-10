@@ -326,7 +326,15 @@ set -euo pipefail
 ASN_FILE=/etc/remnawave-toolkit/scanner-asns.txt
 [[ -f $ASN_FILE ]] || { echo "no $ASN_FILE"; exit 0; }
 
-TMP=$(mktemp); trap 'rm -f "$TMP" "$TMP.clean"' EXIT
+LOGDIR="${SCANNER_LOG_DIR:-/var/log/remnawave-toolkit}"
+LOG="${SCANNER_UPDATE_LOG:-$LOGDIR/whois-asn.log}"
+mkdir -p "$LOGDIR"
+
+log() {
+    local line="[$(date -Is)] $*"
+    echo "$line" >&2
+    echo "$line" >>"$LOG"
+}
 
 # whois к RADB без таймаута может висеть минутами при сетевых сбоях — как curl в других скриптах.
 WHOIS_TIMEOUT="${WHOIS_TIMEOUT:-20}"
@@ -338,19 +346,68 @@ _whois_radb() {
     fi
 }
 
-while read -r asn; do
-    asn="${asn%%#*}"
+_progress_bar() {
+    # $1 текущий шаг, $2 всего (stderr, одна строка)
+    local cur=$1 tot=$2 w=32 n pct
+    (( tot < 1 )) && return 0
+    n=$(( cur * w / tot ))
+    pct=$(( cur * 100 / tot ))
+    local i s=""
+    for ((i = 0; i < n; i++)); do s+="#"; done
+    for ((i = n; i < w; i++)); do s+="-"; done
+    printf '[%s] %3d%% (%d/%d)\n' "$s" "$pct" "$cur" "$tot" >&2
+}
+
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "[!] remnawave-update-scanners: нет команды timeout — whois без лимита может зависнуть (apt install coreutils)" >&2
+fi
+
+declare -a ASN_LIST=()
+while read -r line; do
+    asn="${line%%#*}"
     asn="$(echo "$asn" | tr -d '[:space:]')"
     [[ -z $asn ]] && continue
     [[ "$asn" =~ ^AS[0-9]+$ ]] || continue
-    _whois_radb "-i origin $asn" | awk '/^route:/ {print $2}' >> "$TMP" || true
-done < "$ASN_FILE"
+    ASN_LIST+=("$asn")
+done <"$ASN_FILE"
+
+n_asns=${#ASN_LIST[@]}
+if (( n_asns < 1 )); then
+    log "нет ни одного валидного ASN в $ASN_FILE"
+    exit 0
+fi
+
+TMP=$(mktemp); trap 'rm -f "$TMP" "$TMP.clean"' EXIT
+
+log "=== scanner-asn start: $n_asns ASN, whois.radb.net, timeout ${WHOIS_TIMEOUT}s/query, log=$LOG ==="
+
+i=0
+for asn in "${ASN_LIST[@]}"; do
+    ((++i))
+    SECONDS=0
+    rc=0
+    out=$(_whois_radb "-i origin $asn" 2>/dev/null) || rc=$?
+    el=$SECONDS
+    printf '%s\n' "$out" | awk '/^route:/ {print $2}' >>"$TMP"
+    routes=$(printf '%s\n' "$out" | awk '/^route:/ {c++} END {print c+0}')
+
+    if [[ $rc -eq 124 ]]; then
+        st="TIMEOUT после ${el}s (whois.radb.net:43 не ответил за ${WHOIS_TIMEOUT}s)"
+    elif [[ $rc -ne 0 ]]; then
+        st="сбой rc=${rc} (${el}s)"
+    else
+        st="ok ${el}s, строк route: ${routes}"
+    fi
+    log "[$i/${n_asns}] ${asn} → ${st}"
+    [[ -t 2 ]] && _progress_bar "$i" "$n_asns"
+done
 
 # Только валидные IPv4-префиксы
-sort -u "$TMP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' > "$TMP.clean" || true
+sort -u "$TMP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' >"$TMP.clean" || true
 
-COUNT=$(wc -l < "$TMP.clean")
+COUNT=$(wc -l <"$TMP.clean")
 if [[ $COUNT -lt 50 ]]; then
+    log "итог: только ${COUNT} валидных префиксов — отказ (порог 50)"
     echo "scanner update: только $COUNT префиксов — отказываюсь применять (защита от пустого whois)"
     exit 1
 fi
@@ -359,9 +416,10 @@ fi
     echo "flush set inet rwfilter scanner_v4"
     while read -r p; do
         echo "add element inet rwfilter scanner_v4 { $p }"
-    done < "$TMP.clean"
+    done <"$TMP.clean"
 } | nft -f -
 
+log "=== scanner-asn done: в nft применено ${COUNT} префиксов ==="
 echo "scanner update: применено $COUNT префиксов"
 UPD
 chmod +x /usr/local/sbin/remnawave-update-scanners
@@ -506,7 +564,7 @@ ok "blocklist таймер активен"
 
 # ─── Первичное обновление блок-листов (фоном) ────────────────────────────────
 if [[ "$ENABLE_SCANNER_BLOCK" == "1" ]]; then
-    info "Запрашиваю префиксы по ASN (whois.radb.net, до ${WHOIS_TIMEOUT}s на ASN)..."
+    info "Префиксы по ASN (whois.radb.net, до ${WHOIS_TIMEOUT}s на запрос; прогресс ниже, лог: /var/log/remnawave-toolkit/whois-asn.log)..."
     /usr/local/sbin/remnawave-update-scanners || warn "ASN-обновление не удалось, попробуй позже"
 fi
 if [[ "$ENABLE_SPAMHAUS" == "1" ]]; then
