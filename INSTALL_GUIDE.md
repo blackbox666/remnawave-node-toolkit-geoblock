@@ -1,0 +1,231 @@
+# Гайд для установки на Remnawave-ноду
+
+Это короткая инструкция. Полная справка — в `README.md`.
+
+## Что внутри
+
+- **Оптимизатор** (`scripts/optimize.sh`) — BBR, тюнинг sysctl/лимитов/буферов/swap. Без рисков.
+- **Защита** (`scripts/protect.sh`) — nftables-фаервол с блок-листом сканеров TSPU/РКН и Spamhaus.
+- **Откат** (`scripts/rollback.sh`) — снимает всё.
+
+Поддерживаются Ubuntu 20.04+/24.04, Debian 11/12.
+
+---
+
+## 1. Залить на ноду
+
+С твоей машины (где лежит распакованный toolkit):
+
+```bash
+scp -r remnawave-node-toolkit-geoblock root@<IP>:/root/
+```
+
+Или через `git clone` с GitHub (см. ниже).
+
+---
+
+## 1б. Репозиторий на GitHub и установка one-liner
+
+**Репозиторий:** [github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock](https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock)
+
+В **`install.sh`** уже прописан `REPO_URL` на `raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main`.
+
+Первый push с твоего ПК (если ещё не залито):
+
+```bash
+git remote add origin https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
+git branch -M main
+git push -u origin main
+```
+
+Установка на VPS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
+```
+
+Чужой форк без смены `install.sh` в репозитории:
+
+```bash
+export REMNAWAVE_REPO_URL=https://raw.githubusercontent.com/ЛОГИН/РЕПО/main
+curl -fsSL "$REMNAWAVE_REPO_URL/install.sh" | sudo env REMNAWAVE_REPO_URL="$REMNAWAVE_REPO_URL" bash -s all
+```
+
+**Приватный репозиторий:** `curl` на `raw.githubusercontent.com` без токена не скачает файлы. Удобнее на VPS сделать `git clone` (HTTPS с PAT или SSH-ключ) и затем `sudo bash install.sh` из клонированной папки.
+
+---
+
+## 2. Запустить меню
+
+```bash
+ssh root@<IP>
+cd /root/remnawave-node-toolkit-geoblock
+sudo bash install.sh
+```
+
+Меню:
+
+```
+1) Оптимизатор системы
+2) Защита ноды
+3) Установить ВСЁ (1 + 2)
+4) Откат
+0) Выход
+```
+
+Сначала жми **1**, потом **2**. Или **3** — за раз.
+
+---
+
+## 3. Что спросит «Защита» (пункт 2)
+
+| Параметр | Что вводить |
+|---|---|
+| SSH порт | то же что в `/etc/ssh/sshd_config` (по умолчанию 22) |
+| TCP порты | через запятую: порты XRay/панели. Обычно `443` |
+| UDP порты | UDP-порты для QUIC/Hysteria/TUIC. Обычно `443` |
+| Порт node-agent | по умолч. `2222` (порт связи с панелью Remnawave) |
+| Whitelist | IP/CIDR панели и твоих IP, через запятую. **Очень рекомендую!** |
+
+**Whitelist** — это IP, которые НИКОГДА не банятся. Минимум:
+
+- IP главной панели Remnawave (откуда node-agent получает команды)
+- Твой домашний/рабочий IP
+- IP мониторинга (если есть)
+
+Пример: `1.2.3.4,5.6.7.8/32,10.0.0.0/24`
+
+Если активен **UFW** — скрипт предупредит. После установки `protect.sh` UFW лучше отключить:
+
+```bash
+systemctl disable --now ufw
+```
+
+---
+
+## 4. Сейфти-таймер
+
+Когда `protect.sh` применяет правила, запускается таймер на **5 минут**.
+Если SSH соединение отвалится (например, ты случайно забыл whitelist'нуть себя) — через 5 мин правила автоматически сбросятся, и ты снова попадёшь на сервер.
+
+Скрипт спросит «Соединение работает? [y/N]:» — открой ВТОРОЕ окно SSH с другого терминала, проверь что коннект живой, и только потом нажми `y`. Это отменит таймер.
+
+Если что-то совсем плохое — не паникуй, через 5 мин SSH снова будет.
+
+---
+
+## 5. Проверка после установки
+
+```bash
+# BBR активен?
+sysctl net.ipv4.tcp_congestion_control      # → bbr
+
+# Лимиты подняты?
+sysctl fs.file-max                           # → 2097152
+
+# Фаервол работает?
+sudo nft list ruleset | head -40
+
+# Сколько ASN-префиксов TSPU/РКН в блок-листе?
+sudo nft list set inet rwfilter scanner_v4 | grep -c '/'
+# обычно 5000–15000
+
+# Кого автоматически забанили (за SSH-флуд / port-scan)?
+sudo nft list set inet rwfilter autoban_v4
+```
+
+---
+
+## 6. Параметры в неинтерактивном режиме
+
+Если ставишь по SSH из своего скрипта/CI, передавай через env:
+
+```bash
+sudo SSH_PORT=22 \
+     TCP_PORTS=443,8443 \
+     UDP_PORTS=443 \
+     NODE_PORT=2222 \
+     WHITELIST="1.2.3.4,5.6.7.0/24" \
+     REMNAWAVE_NONINTERACTIVE=1 \
+     bash scripts/protect.sh
+```
+
+Доступные переменные:
+
+- `SSH_PORT` — порт SSH (если 0, авто-детект)
+- `TCP_PORTS` / `UDP_PORTS` — сервисные порты
+- `NODE_PORT` — порт node-agent (2222 по умолч.)
+- `WHITELIST` — IP/CIDR через запятую
+- `SAFETY_DELAY` — секунд до авто-сброса (300 по умолч.)
+- `ENABLE_SCANNER_BLOCK=0` — выключить ASN-блок
+- `ENABLE_SPAMHAUS=0` — выключить Spamhaus
+- `DRY_RUN=1` — только сгенерировать конфиг, не применять
+- `REMNAWAVE_NONINTERACTIVE=1` — не задавать вопросов
+
+---
+
+## 7. Откат
+
+Если что-то не нравится:
+
+```bash
+sudo bash install.sh rollback all          # снять всё
+sudo bash install.sh rollback optimize     # снять только оптимизатор
+sudo bash install.sh rollback protect      # снять только защиту
+```
+
+Бэкапы оригиналов остаются в `/var/backups/remnawave-toolkit/`.
+
+---
+
+## 8. Возможные проблемы
+
+**SSH отвалился сразу после применения protect.sh:**
+Подожди 5 минут, сейфти-таймер сбросит правила.
+Потом запусти ещё раз с правильным `WHITELIST`.
+
+**Панель Remnawave не видит ноду после установки:**
+Скорее всего IP главной панели не в whitelist. Добавь его:
+
+```bash
+sudo nft add element inet rwfilter whitelist_v4 "{ 1.2.3.4 }"
+```
+
+И добавь в `/etc/remnawave-toolkit/` если нужно постоянно — проще запустить `protect.sh` ещё раз с обновлённым `WHITELIST`.
+
+**Конфликт с UFW:**
+После применения `protect.sh` UFW нужно отключить:
+
+```bash
+systemctl disable --now ufw
+```
+
+**Скрипт не качает ASN-префиксы:**
+`whois.radb.net` иногда тормозит. Запусти позже руками:
+
+```bash
+sudo /usr/local/sbin/remnawave-update-scanners
+```
+
+---
+
+## 9. Что под капотом (короткое объяснение)
+
+**Оптимизатор:**
+BBR + fq_codel вместо CUBIC = +20-40% к скорости TCP.
+sysctl-буферы 64M = меньше потерь на жирных каналах.
+file-max 2M = тысячи одновременных соединений.
+
+**Защита:**
+nftables в ядре = быстрее fail2ban (тот гоняет логи на каждом read).
+ASN-блок TSPU/РКН-сканеров = они даже не доходят до сервиса.
+Spamhaus DROP = ботнеты сразу в чёрный.
+SYN на закрытый порт → авто-бан 24ч = классические сканеры (zmap, masscan) в первом же пакете попадают в blacklist.
+6 SSH-попыток/мин с одного IP = бан 24ч (всё это БЕЗ fail2ban).
+Stealth-режим: всё лишнее `drop`, не `reject` — сервер не светит наличие.
+
+---
+
+## 10. Лицензия
+
+MIT. Делайте что хотите, гарантий нет.
