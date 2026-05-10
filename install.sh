@@ -8,9 +8,9 @@
 #   sudo bash install.sh all                — оптимизация + защита
 #   sudo bash install.sh rollback [opt|prot|all] — откат
 #
-# Установка с гитхаба через curl — только для ПУБЛИЧНОГО репо (приватное даст 404 без токена).
-# Приватный репозиторий: git clone git@github.com:ded-maxim-1337/remnawave-node-toolkit-geoblock.git && sudo bash install.sh
+# Установка с GitHub (публичный репо):
 #   curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
+# Приватный репо: raw не отдаёт файлы без токена — git clone и sudo bash install.sh из каталога.
 
 set -euo pipefail
 

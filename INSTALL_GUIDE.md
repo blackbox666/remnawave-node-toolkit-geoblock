@@ -26,22 +26,25 @@ scp -r remnawave-node-toolkit-geoblock root@<IP>:/root/
 
 ## 1б. Репозиторий на GitHub
 
-**Репозиторий:** [github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock](https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock) (**приватный**).
+**Репозиторий:** [github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock](https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock) (публичный).
 
-В **`install.sh`** для `curl|bash` указан `REPO_URL` на raw — он работает только у **публичных** репозиториев. Сейчас при `curl ... raw.githubusercontent.com/.../install.sh` без входа GitHub отвечает **404** — это ожидаемо.
+В **`install.sh`** по умолчанию `REPO_URL` указывает на этот же репо на `raw.githubusercontent.com` — удобно для `curl | bash`.
 
-**Установка на VPS (приватный репо):**
+**Установка на VPS (one-liner):**
 
 ```bash
-git clone git@github.com:ded-maxim-1337/remnawave-node-toolkit-geoblock.git
-# или: git clone https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
+curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
+```
+
+Или клон и меню:
+
+```bash
+git clone https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
 cd remnawave-node-toolkit-geoblock
 sudo bash install.sh all
 ```
 
-Нужен **SSH-ключ** на сервере (в аккаунте GitHub) или **HTTPS + PAT** вместо пароля.
-
-Первый push с ПК (если ещё не настроено):
+Первый push с ПК (если настраиваешь репо с нуля):
 
 ```bash
 git remote add origin https://github.com/ded-maxim-1337/remnawave-node-toolkit-geoblock.git
@@ -49,11 +52,7 @@ git branch -M main
 git push -u origin main
 ```
 
-**Публичный форк** (если когда-нибудь откроешь репо): тогда сработает one-liner:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
-```
+**Если репозиторий снова сделать приватным**, raw-URL перестанет отдавать файлы без авторизации (404) — тогда только `git clone` с ключом или токеном.
 
 ---
 
