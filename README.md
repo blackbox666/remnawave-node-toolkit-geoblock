@@ -106,7 +106,9 @@ sudo SSH_PORT=22 \
 | `NODE_PORT` | `2222` | порт `remnawave-node-agent` |
 | `WHITELIST` | _пусто_ | IP/CIDR панели, мониторинга — всегда `accept` |
 | `SAFETY_DELAY` | `300` | сек до авто-сброса правил (если не подтвердить) |
-| `ENABLE_SCANNER_BLOCK` | `1` | качать ASN-префиксы при установке |
+| `ENABLE_SCANNER_BLOCK` | `1` | обновлять ASN-блоклист при установке |
+| `SCANNER_PREFIX_SOURCE` | `auto` | `auto` — RIPEstat HTTPS, при пустом ответе whois RADB; `ripestat` / `whois` — только один источник |
+| `RIPESTAT_TIMEOUT` | `15` | сек на один запрос к stat.ripe.net |
 | `ENABLE_SPAMHAUS` | `1` | качать Spamhaus DROP при установке |
 | `DRY_RUN` | `0` | `1` — только сгенерировать /etc/nftables.conf и проверить через `nft -c`, без применения |
 

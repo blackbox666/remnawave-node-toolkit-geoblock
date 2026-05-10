@@ -204,7 +204,9 @@ systemctl disable --now ufw
 ```
 
 **Скрипт не качает ASN-префиксы:**
-`whois.radb.net` иногда тормозит. Запусти позже руками:
+По умолчанию префиксы берутся с **HTTPS RIPEstat** (`stat.ripe.net`), резерв — `whois.radb.net:43`. Если у хостера заблокирован исходящий порт 43, ripestat всё равно должен сработать. Режим: переменная `SCANNER_PREFIX_SOURCE` (`auto` / `ripestat` / `whois`).
+
+`whois.radb.net` при режиме `whois` или как запас может тормозить — запусти позже:
 
 ```bash
 sudo /usr/local/sbin/remnawave-update-scanners

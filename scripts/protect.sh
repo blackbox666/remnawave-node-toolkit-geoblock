@@ -33,6 +33,9 @@ WHITELIST="${WHITELIST:-}"                   # IP/CIDR через запятую
 SAFETY_DELAY="${SAFETY_DELAY:-300}"          # секунд до авто-сброса правил
 ENABLE_SCANNER_BLOCK="${ENABLE_SCANNER_BLOCK:-1}"
 WHOIS_TIMEOUT="${WHOIS_TIMEOUT:-20}"        # сек на один ASN к whois.radb.net (антивисание)
+RIPESTAT_TIMEOUT="${RIPESTAT_TIMEOUT:-15}"  # curl к stat.ripe.net за один ASN
+# auto|ripestat|whois — у части VPS блокируют исходящий TCP/43 (RADB); auto берёт префиксы по HTTPS
+SCANNER_PREFIX_SOURCE="${SCANNER_PREFIX_SOURCE:-auto}"
 ENABLE_SPAMHAUS="${ENABLE_SPAMHAUS:-1}"
 ENABLE_GEOBLOCK="${ENABLE_GEOBLOCK:-1}"      # 1 = блок 22 стран-источников атак (ipdeny.com)
 DRY_RUN="${DRY_RUN:-0}"                      # 1 = только сгенерировать и проверить, не применять
@@ -336,8 +339,21 @@ log() {
     echo "$line" >>"$LOG"
 }
 
-# whois к RADB без таймаута может висеть минутами при сетевых сбоях — как curl в других скриптах.
+# whois к RADB без таймаута может висеть минутами; часть хостеров режет исходящий TCP/43 — тогда RIPEstat (443).
+SCANNER_PREFIX_SOURCE="${SCANNER_PREFIX_SOURCE:-auto}"
+RIPESTAT_TIMEOUT="${RIPESTAT_TIMEOUT:-15}"
 WHOIS_TIMEOUT="${WHOIS_TIMEOUT:-20}"
+
+_fetch_v4_ripestat() {
+    # Только IPv4 из announced-prefixes (HTTPS, обход блокировки whois:43).
+    local asn="$1" num="${asn#AS}" json
+    json=$(curl -fsSL --max-time "${RIPESTAT_TIMEOUT}" --retry 1 \
+        "https://stat.ripe.net/data/announced-prefixes/data.json?resource=${num}" 2>/dev/null) || return 0
+    grep -qE '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$json" || return 0
+    # Пустой grep при set -e/pipefail — через подоболочку
+    ( printf '%s\n' "$json" | grep -oE '"prefix":"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+"' | sed 's/^"prefix":"//;s/"$//' ) 2>/dev/null || true
+}
+
 _whois_radb() {
     if command -v timeout >/dev/null 2>&1; then
         timeout --kill-after=5 "${WHOIS_TIMEOUT}" whois -h whois.radb.net -- "$1" 2>/dev/null
@@ -379,25 +395,67 @@ fi
 
 TMP=$(mktemp); trap 'rm -f "$TMP" "$TMP.clean"' EXIT
 
-log "=== scanner-asn start: $n_asns ASN, whois.radb.net, timeout ${WHOIS_TIMEOUT}s/query, log=$LOG ==="
+log "=== scanner-asn start: ${n_asns} ASN, source=${SCANNER_PREFIX_SOURCE}, ripestat=https (${RIPESTAT_TIMEOUT}s), whois.radb.net (${WHOIS_TIMEOUT}s), log=${LOG} ==="
 
 i=0
 for asn in "${ASN_LIST[@]}"; do
     ((++i))
-    SECONDS=0
-    rc=0
-    out=$(_whois_radb "-i origin $asn" 2>/dev/null) || rc=$?
-    el=$SECONDS
-    printf '%s\n' "$out" | awk '/^route:/ {print $2}' >>"$TMP"
-    routes=$(printf '%s\n' "$out" | awk '/^route:/ {c++} END {print c+0}')
+    st=""
+    ripe_v4=""
+    nripe=0
 
-    if [[ $rc -eq 124 ]]; then
-        st="TIMEOUT после ${el}s (whois.radb.net:43 не ответил за ${WHOIS_TIMEOUT}s)"
-    elif [[ $rc -ne 0 ]]; then
-        st="сбой rc=${rc} (${el}s)"
+    if [[ "${SCANNER_PREFIX_SOURCE}" == "whois" ]]; then
+        :
     else
-        st="ok ${el}s, строк route: ${routes}"
+        SECONDS=0
+        ripe_v4=$(_fetch_v4_ripestat "$asn")
+        el_ripe=$SECONDS
+        nripe=$(printf '%s\n' "$ripe_v4" | sed '/^$/d' | wc -l)
     fi
+
+    if [[ "${SCANNER_PREFIX_SOURCE}" == "ripestat" ]]; then
+        if ((nripe > 0)); then
+            printf '%s\n' "$ripe_v4" | sed '/^$/d' >>"$TMP"
+            st="ripestat ${nripe} IPv4 за ${el_ripe}s"
+        else
+            st="ripestat: нет IPv4 (${el_ripe}s)"
+        fi
+    elif [[ "${SCANNER_PREFIX_SOURCE}" == "whois" ]]; then
+        SECONDS=0
+        rc=0
+        out=$(_whois_radb "-i origin $asn" 2>/dev/null) || rc=$?
+        el=$SECONDS
+        printf '%s\n' "$out" | awk '/^route:/ {print $2}' >>"$TMP"
+        routes=$(printf '%s\n' "$out" | awk '/^route:/ {c++} END {print c+0}')
+        if [[ $rc -eq 124 ]]; then
+            st="whois TIMEOUT ${el}s (whois.radb.net:43)"
+        elif [[ $rc -ne 0 ]]; then
+            st="whois сбой rc=${rc} (${el}s)"
+        else
+            st="whois ok ${el}s, route: ${routes}"
+        fi
+    else
+        # auto
+        if ((nripe > 0)); then
+            printf '%s\n' "$ripe_v4" | sed '/^$/d' >>"$TMP"
+            st="ripestat ${nripe} IPv4 за ${el_ripe}s"
+        else
+            SECONDS=0
+            rc=0
+            out=$(_whois_radb "-i origin $asn" 2>/dev/null) || rc=$?
+            el=$SECONDS
+            printf '%s\n' "$out" | awk '/^route:/ {print $2}' >>"$TMP"
+            routes=$(printf '%s\n' "$out" | awk '/^route:/ {c++} END {print c+0}')
+            if [[ $rc -eq 124 ]]; then
+                st="ripestat пусто → whois TIMEOUT ${el}s (:43?)"
+            elif [[ $rc -ne 0 ]]; then
+                st="ripestat пусто → whois rc=${rc} (${el}s)"
+            else
+                st="ripestat пусто → whois ok ${el}s, route: ${routes}"
+            fi
+        fi
+    fi
+
     log "[$i/${n_asns}] ${asn} → ${st}"
     [[ -t 2 ]] && _progress_bar "$i" "$n_asns"
 done
@@ -408,7 +466,7 @@ sort -u "$TMP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' >"$TMP.clean"
 COUNT=$(wc -l <"$TMP.clean")
 if [[ $COUNT -lt 50 ]]; then
     log "итог: только ${COUNT} валидных префиксов — отказ (порог 50)"
-    echo "scanner update: только $COUNT префиксов — отказываюсь применять (защита от пустого whois)"
+    echo "scanner update: только $COUNT префиксов — отказываюсь применять (слишком мало данных с ripestat/whois)"
     exit 1
 fi
 
@@ -564,7 +622,7 @@ ok "blocklist таймер активен"
 
 # ─── Первичное обновление блок-листов (фоном) ────────────────────────────────
 if [[ "$ENABLE_SCANNER_BLOCK" == "1" ]]; then
-    info "Префиксы по ASN (whois.radb.net, до ${WHOIS_TIMEOUT}s на запрос; прогресс ниже, лог: /var/log/remnawave-toolkit/whois-asn.log)..."
+    info "Префиксы по ASN (HTTPS RIPEstat, резерв whois:43; прогресс ниже, лог: /var/log/remnawave-toolkit/whois-asn.log)..."
     /usr/local/sbin/remnawave-update-scanners || warn "ASN-обновление не удалось, попробуй позже"
 fi
 if [[ "$ENABLE_SPAMHAUS" == "1" ]]; then
