@@ -32,6 +32,7 @@ NODE_PORT="${NODE_PORT:-2222}"               # порт remnawave-node-agent
 WHITELIST="${WHITELIST:-}"                   # IP/CIDR через запятую (мониторинг, главная панель)
 SAFETY_DELAY="${SAFETY_DELAY:-300}"          # секунд до авто-сброса правил
 ENABLE_SCANNER_BLOCK="${ENABLE_SCANNER_BLOCK:-1}"
+WHOIS_TIMEOUT="${WHOIS_TIMEOUT:-20}"        # сек на один ASN к whois.radb.net (антивисание)
 ENABLE_SPAMHAUS="${ENABLE_SPAMHAUS:-1}"
 ENABLE_GEOBLOCK="${ENABLE_GEOBLOCK:-1}"      # 1 = блок 22 стран-источников атак (ipdeny.com)
 DRY_RUN="${DRY_RUN:-0}"                      # 1 = только сгенерировать и проверить, не применять
@@ -327,12 +328,22 @@ ASN_FILE=/etc/remnawave-toolkit/scanner-asns.txt
 
 TMP=$(mktemp); trap 'rm -f "$TMP" "$TMP.clean"' EXIT
 
+# whois к RADB без таймаута может висеть минутами при сетевых сбоях — как curl в других скриптах.
+WHOIS_TIMEOUT="${WHOIS_TIMEOUT:-20}"
+_whois_radb() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --kill-after=5 "${WHOIS_TIMEOUT}" whois -h whois.radb.net -- "$1" 2>/dev/null
+    else
+        whois -h whois.radb.net -- "$1" 2>/dev/null
+    fi
+}
+
 while read -r asn; do
     asn="${asn%%#*}"
     asn="$(echo "$asn" | tr -d '[:space:]')"
     [[ -z $asn ]] && continue
-    whois -h whois.radb.net -- "-i origin $asn" 2>/dev/null \
-        | awk '/^route:/ {print $2}' >> "$TMP" || true
+    [[ "$asn" =~ ^AS[0-9]+$ ]] || continue
+    _whois_radb "-i origin $asn" | awk '/^route:/ {print $2}' >> "$TMP" || true
 done < "$ASN_FILE"
 
 # Только валидные IPv4-префиксы
@@ -495,7 +506,7 @@ ok "blocklist таймер активен"
 
 # ─── Первичное обновление блок-листов (фоном) ────────────────────────────────
 if [[ "$ENABLE_SCANNER_BLOCK" == "1" ]]; then
-    info "Скачиваю ASN-префиксы (это займёт ~30 сек)..."
+    info "Запрашиваю префиксы по ASN (whois.radb.net, до ${WHOIS_TIMEOUT}s на ASN)..."
     /usr/local/sbin/remnawave-update-scanners || warn "ASN-обновление не удалось, попробуй позже"
 fi
 if [[ "$ENABLE_SPAMHAUS" == "1" ]]; then
