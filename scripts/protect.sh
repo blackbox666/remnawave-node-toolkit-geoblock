@@ -525,7 +525,12 @@ warn "если ты не подтвердишь, что соединение е�
 echo
 echo "  Открой В НОВОМ окне: ssh root@<этот сервер> и убедись, что коннект работает."
 echo
-read -r -p "Соединение работает? [y/N]: " confirm
+# Читать с терминала: при запуске через «curl | bash» или install.sh stdin не TTY — read иначе сразу EOF и вопрос не ждёт.
+if [[ -r /dev/tty ]]; then
+    read -r -p "Соединение работает? [y/N]: " confirm </dev/tty
+else
+    read -r -p "Соединение работает? [y/N]: " confirm
+fi
 if [[ "$confirm" =~ ^[yYдД] ]]; then
     if [[ -f /tmp/remnawave-fw-safety.pid ]]; then
         kill "$(cat /tmp/remnawave-fw-safety.pid)" 2>/dev/null || true
