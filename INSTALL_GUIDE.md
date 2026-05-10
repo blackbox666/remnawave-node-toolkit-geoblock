@@ -33,6 +33,13 @@ scp -r remnawave-node-toolkit-geoblock root@<IP>:/root/
 **Установка на VPS (one-liner):**
 
 ```bash
+curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" | sudo bash -s all
+```
+
+Чтобы **не попадать на старый кэш** `raw.githubusercontent.com`: в URL первого `curl` добавь уникальный query (`?$(date +%s)` — как выше). Сам `install.sh` при скачивании `scripts/*.sh` добавляет свой `nocache=…` (если не отключить `REMNAWAVE_CACHE_BUST=0`).
+
+```text
+# старый вариант без bust — CDN мог отдать вчерашний install.sh
 curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
 ```
 

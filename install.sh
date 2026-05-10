@@ -8,8 +8,10 @@
 #   sudo bash install.sh all                — оптимизация + защита
 #   sudo bash install.sh rollback [opt|prot|all] — откат
 #
-# Установка с GitHub (публичный репо):
-#   curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh | sudo bash -s all
+# Установка с GitHub (публичный репо). CDN иногда отдаёт старый install.sh — добавь ?время к URL:
+#   curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" | sudo bash -s all
+# Скрипты protect/optimize при скачивании с raw.githubusercontent.com получают свой nocache= (см. _repo_curl).
+# Отключить: REMNAWAVE_CACHE_BUST=0
 # Приватный репо: raw не отдаёт файлы без токена — git clone и sudo bash install.sh из каталога.
 
 set -euo pipefail
@@ -19,6 +21,23 @@ SCRIPTS="$SCRIPT_DIR/scripts"
 
 # Если запущено через curl|bash — самих скриптов рядом нет, нужно скачать
 REPO_URL="${REMNAWAVE_REPO_URL:-https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main}"
+REPO_URL="${REPO_URL%/}"
+
+_repo_curl() {
+    # $1 = путь от корня репо (scripts/protect.sh), $2 = локальный файл (-o)
+    local relpath="${1#./}"
+    local dest="$2"
+    local url="$REPO_URL/$relpath"
+    if [[ "${REMNAWAVE_CACHE_BUST:-1}" == "1" && "$REPO_URL" == *"raw.githubusercontent.com"* ]]; then
+        local q
+        q="$(date +%s%N 2>/dev/null || echo "$(date +%s)$RANDOM")"
+        url="${url}?nocache=${q}"
+    fi
+    curl -fsSL \
+        -H 'Cache-Control: no-cache' \
+        -H 'Pragma: no-cache' \
+        "$url" -o "$dest"
+}
 
 if [[ ! -d "$SCRIPTS" ]]; then
     if [[ "$REPO_URL" == *"REPLACE_ME"* ]]; then
@@ -31,9 +50,9 @@ if [[ ! -d "$SCRIPTS" ]]; then
     fi
     SCRIPTS="$(mktemp -d)/scripts"
     mkdir -p "$SCRIPTS/lib"
-    echo "[*] Скачиваю модули из $REPO_URL ..."
+    echo "[*] Скачиваю модули из $REPO_URL (без кэша CDN) ..."
     for f in lib/common.sh optimize.sh protect.sh rollback.sh; do
-        curl -fsSL "$REPO_URL/scripts/$f" -o "$SCRIPTS/$f" \
+        _repo_curl "scripts/$f" "$SCRIPTS/$f" \
             || { echo "[x] Не удалось скачать $f"; exit 1; }
     done
     chmod +x "$SCRIPTS"/*.sh "$SCRIPTS"/lib/*.sh

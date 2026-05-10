@@ -59,7 +59,7 @@
 ### Способ 1 — one-liner (`curl`)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh \
+curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" \
   | sudo bash -s all
 ```
 
