@@ -5,7 +5,11 @@
 
 > Поддерживается **Debian 11/12** и **Ubuntu 20.04/22.04/24.04**.
 > Тестировалось на нодах с `remnawave/node` в `network_mode: host`.
+### Very fast start: Способ 1 — one-liner (`curl`)
 
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" | sudo bash -s all
+```
 ---
 
 ## Что внутри
@@ -61,11 +65,6 @@
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main/install.sh?$(date +%s)" | sudo bash -s all
 ```
-
-`?$(date +%s)` обходит закэшированный ответ CDN у `raw.githubusercontent.com`.
-
-Другой форк: задай `REMNAWAVE_REPO_URL` на свой `raw.githubusercontent.com/.../main` (см. `INSTALL_GUIDE.md`).
-
 ### Способ 2 — клон + меню
 
 ```bash
@@ -80,9 +79,6 @@ sudo bash install.sh
 sudo bash scripts/optimize.sh
 sudo bash scripts/protect.sh
 ```
-
-Если сделаешь репозиторий **приватным**, `curl` к `raw.githubusercontent.com` вернёт **404** — используй `git clone` с SSH или HTTPS + токен.
-
 ### Неинтерактивный режим
 
 ```bash
