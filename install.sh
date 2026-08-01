@@ -16,8 +16,14 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS="$SCRIPT_DIR/scripts"
+# curl|bash: BASH_SOURCE не задан (и с set -u падает) — скрипты скачаем ниже
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPTS="$SCRIPT_DIR/scripts"
+else
+    SCRIPT_DIR=""
+    SCRIPTS=""
+fi
 
 # Если запущено через curl|bash — самих скриптов рядом нет, нужно скачать
 REPO_URL="${REMNAWAVE_REPO_URL:-https://raw.githubusercontent.com/ded-maxim-1337/remnawave-node-toolkit-geoblock/main}"
@@ -39,7 +45,7 @@ _repo_curl() {
         "$url" -o "$dest"
 }
 
-if [[ ! -d "$SCRIPTS" ]]; then
+if [[ -z "$SCRIPTS" || ! -d "$SCRIPTS" ]]; then
     if [[ "$REPO_URL" == *"REPLACE_ME"* ]]; then
         echo "[x] В install.sh всё ещё placeholder REPLACE_ME в REPO_URL."
         echo "    A) Поправь в этом файле строку REPO_URL (GitHub-логин и имя репозитория) и закоммить."
