@@ -56,7 +56,9 @@ backup_file() {
     fi
 }
 
-# Ждём освобождения dpkg/apt (часто держит unattended-upgrades на свежих VPS)
+# Ждём освобождения dpkg/apt (часто держит unattended-upgrades на свежих VPS).
+# Нельзя считать busy idle helper: unattended-upgrade-shutdown --wait-for-signal
+# (systemd Comm часто = unattended-upgr) — иначе ждём 600s при свободных lock'ах.
 wait_for_apt_lock() {
     local max_wait="${APT_LOCK_WAIT:-600}"
     local interval=5
@@ -68,24 +70,39 @@ wait_for_apt_lock() {
         /var/cache/apt/archives/lock
     )
 
-    while true; do
-        local busy=0
+    _apt_lock_held() {
         local lock
         for lock in "${locks[@]}"; do
+            [[ -e "$lock" ]] || continue
             if command -v fuser >/dev/null 2>&1; then
-                if [[ -e "$lock" ]] && fuser "$lock" >/dev/null 2>&1; then
-                    busy=1
-                    break
-                fi
+                fuser "$lock" >/dev/null 2>&1 && return 0
+            elif command -v lsof >/dev/null 2>&1; then
+                lsof "$lock" >/dev/null 2>&1 && return 0
             fi
         done
-        if (( busy == 0 )); then
-            if pgrep -x unattended-upgr >/dev/null 2>&1 \
-                || pgrep -x apt-get >/dev/null 2>&1 \
-                || pgrep -x apt >/dev/null 2>&1 \
-                || pgrep -x dpkg >/dev/null 2>&1; then
-                busy=1
-            fi
+        return 1
+    }
+
+    # Реальный unattended-upgrade, не shutdown-helper
+    _unattended_upgrade_busy() {
+        local pid cmd
+        for pid in $(pgrep -f 'unattended-upgrade' 2>/dev/null || true); do
+            [[ -r "/proc/$pid/cmdline" ]] || continue
+            cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+            [[ "$cmd" == *unattended-upgrade-shutdown* ]] && continue
+            [[ "$cmd" == *unattended-upgrade* ]] && return 0
+        done
+        return 1
+    }
+
+    while true; do
+        local busy=0
+        if _apt_lock_held \
+            || pgrep -x apt-get >/dev/null 2>&1 \
+            || pgrep -x apt >/dev/null 2>&1 \
+            || pgrep -x dpkg >/dev/null 2>&1 \
+            || _unattended_upgrade_busy; then
+            busy=1
         fi
         if (( busy == 0 )); then
             return 0
